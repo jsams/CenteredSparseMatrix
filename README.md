@@ -26,10 +26,9 @@ isapprox(X_cent_sparse' * z, X_cent_dense' * z)
 isapprox(X_cent_sparse' * Z, X_cent_dense' * Z)
 ```
 
-I wrote this to enable computing things like a centered partial SVD on very
-large (~3 billion non-zero elements, in a 27-trillion cell matrix) without
-having to actually store the 27 trillion cells (that would be 216 TiB of data
-as opposed to 24 GiB)
+The key point is that the sparsity structure of the matrix is left unchanged,
+the centering of the zero-elements is done on-demand, and where possible, algorithms
+take advantage of knowing the column-constant mean value.
 
 I've tried adapting the gapxy algorithms in an efficient manner to this use
 case, but suggestions to improve efficiency are welcome.
