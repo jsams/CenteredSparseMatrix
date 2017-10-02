@@ -8,6 +8,10 @@
 
 
 __precompile__()
+"""
+    Create a sparse matrix that behaves as if it were centered by its column
+    means without losing the sparsity structure of the original data.
+"""
 module CenteredSparseMatrix
 
 import Base:
@@ -15,13 +19,32 @@ import Base:
 
 export CenteredSparseCSC, NotRow,
         copy, getindex, isapprox, size, *, A_mul_B!, Ac_mul_B!, Ac_mul_B
+"""
+    CenteredSparseCSC{Tv, Ti<:Integer} <: AbstractSparseMatrix{Tv, Ti}
 
+    Matrix type for storing matrices that would be sparse if left un-centered
+"""
 struct CenteredSparseCSC{T, S} <: AbstractSparseMatrix{T, S}
     A::SparseMatrixCSC{T, S}
     centers::Array{Float64, 2} # excludes complex, but don't know what i'm doing
     row_idx_pool::Array{S, 1}
 end
 
+"""
+    CenteredSparseCSC(A::SparseMatrixCSC, docopy=true, recenter=true, centers=mean(A, 1))
+
+    Create a CenteredSparseCSC from a sparse matrix
+
+    # Arguments
+    - `A`, a SparseMatrix in CSC format
+    - `docopy` whether to copy the data in A or assign by reference. default true
+    - `recenter` whether to recenter the data in A or is it already centered. default true
+    - `centers` what are the centers to use for doing the recentering. defaults
+      to column means. Must have same length as the number of columns.
+
+    Note that setting docopy=false may have unexpected consequences on your
+    original data
+"""
 function CenteredSparseCSC(A::SparseMatrixCSC{T, S}; docopy::Bool=true, recenter=true,
                            centers=mean(A,1)) where {S, T}
     if docopy
@@ -36,10 +59,23 @@ function CenteredSparseCSC(A::SparseMatrixCSC{T, S}; docopy::Bool=true, recenter
     CenteredSparseCSC(A, centers, zeros(S, size(A, 1)))
 end
 
+"""
+    CenteredSparseCSC(A::Array{T, 2})
+
+    Create a CenteredSparseCSC from a dense array.
+"""
 function CenteredSparseCSC(A::Array{T, 2}) where T
     CenteredSparseCSC(sparse(A), docopy=false)
 end
 
+"""
+    CenteredSparseCSC(i, j, x, [m, n, combine])
+
+    Create a CenteredSparseCSC using the usual method of constructing a sparse matrix
+
+    See `?sparse` for meaning of arguments. If you need more flexibility, use constructor
+    starting with a SparseMatrixCSC
+"""
 function CenteredSparseCSC(i::S, j::S, x::T, m::S=max(i), n::S=max(j),
                            combine::Function=+) where S where T
     A = sparse(i, j, x, m, n, combine)
