@@ -183,8 +183,8 @@ end
         k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
         r = view(A.A.rowval, k)
         notr = NotRow(A, r)
-        y[j:j] .= view(y, j) .+ sum(view(A.A.nzval, k) .* view(x, r))
-        y[j:j] .= view(y, j) .- A.centers[j] * sum(view(x, notr))
+        y[j:j] = view(y, j) .+ sum(view(A.A.nzval, k) .* view(x, r))
+        y[j:j] = view(y, j) .- A.centers[j] * sum(view(x, notr))
     end
     return y
 end
@@ -205,9 +205,9 @@ end
         k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
         r = view(A.A.rowval, k)
         notr = NotRow(A, r)
-        y[j, :] .= view(y, j, :) .+
+        y[j, :] = view(y, j, :) .+
             reshape(sum(view(A.A.nzval, k) .* view(x, r, :), 1), K, 1)
-        y[j, :] .= view(y, j, :) .-
+        y[j, :] = view(y, j, :) .-
                     A.centers[j] .* reshape(sum(view(x, notr, :), 1), K, 1)
     end
     return y
