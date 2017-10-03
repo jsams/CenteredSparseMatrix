@@ -3,6 +3,9 @@
 # * throw error on non/misfunctional methods. or implement them
 # * See for thoughts on potentially speeding the inverse index up
 #   https://github.com/mbauman/InvertedIndices.jl/issues/1
+# * see methodswith(SparseMatrixCSC) for a todo list
+# * some kind of benchmarking suite would be nice
+# * remove reshape and get view indices right in Ac_mul_B
 
 
 
@@ -127,8 +130,7 @@ getindex(A::CenteredSparseCSC, ::Colon, ::Colon) = copy(A)
 function A_mul_B(A::CenteredSparseCSC{T, S},
                  x::StridedVector{T}) where T where S
     y = zeros(size(A, 1))
-    A_mul_B!(y, A, x)
-    return y
+    return A_mul_B!(y, A, x)
 end
 
 @inbounds function A_mul_B!(y::StridedVector{T}, A::CenteredSparseCSC{T, S},
@@ -138,7 +140,6 @@ end
     for j in 1:m
         k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
         r = view(A.A.rowval, k)
-        #notr = inv_index!(view(A.row_idx_pool, 1:(n-length(r))), r, n)
         notr = NotRow(A, r)
         y[r] = view(y, r) .+ view(A.A.nzval, k) .* x[j]
         y[notr] = view(y, notr) .- A.centers[j] .* x[j]
@@ -149,8 +150,7 @@ end
 function A_mul_B(A::CenteredSparseCSC{T, S},
                  x::StridedArray{T, 2}) where T where S
     y = zeros(size(A, 1), size(x, 2))
-    A_mul_B!(y, A, x)
-    return y
+    return A_mul_B!(y, A, x)
 end
 
 @inbounds function A_mul_B!(y::StridedArray{T, 2}, A::CenteredSparseCSC{T, S},
@@ -160,22 +160,19 @@ end
     for j in 1:m
         k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
         r = view(A.A.rowval, k)
-        #notr = inv_index!(view(row_idx_pool, 1:(n-length(r))), r, n)
         notr = NotRow(A, r)
-        y[r, :] = view(y, r, :) .+ view(A.A.nzval, k) * view(x, j:j, :)
-        y[notr, :] = view(y, notr, :) .- A.centers[j] .* view(x, j:j, :)
+        y[r, :] .= view(y, r, :) .+ view(A.A.nzval, k) * view(x, j:j, :)
+        y[notr, :] .= view(y, notr, :) .- A.centers[j] .* view(x, j:j, :)
     end
+    return y
 end
 
-
-
-# A'B
+# A'*B
 
 function Ac_mul_B(A::CenteredSparseCSC{T, S},
                   x::StridedVector{T}) where T where S
     y = zeros(size(A, 2))
-    Ac_mul_B!(y, A, x)
-    return y
+    return Ac_mul_B!(y, A, x)
 end
 
 @inbounds function Ac_mul_B!(y::StridedVector{T}, A::CenteredSparseCSC{T, S},
@@ -186,18 +183,17 @@ end
     for j in 1:m
         k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
         r = view(A.A.rowval, k)
-        #notr = inv_index!(view(A.row_idx_pool, 1:(n-length(r))), r, n)
         notr = NotRow(A, r)
-        y[j:j] = view(y, j) .+ sum(view(A.A.nzval, k) .* view(x, r))
-        y[j:j] = view(y, j) .- A.centers[j] * sum(view(x, notr))
+        y[j:j] .= view(y, j) .+ sum(view(A.A.nzval, k) .* view(x, r))
+        y[j:j] .= view(y, j) .- A.centers[j] * sum(view(x, notr))
     end
+    return y
 end
 
 function Ac_mul_B(A::CenteredSparseCSC{T, S},
                   x::StridedArray{T, 2}) where T where S
     y = zeros(size(A, 2), size(x, 2))
-    Ac_mul_B!(y, A, x)
-    return y
+    return Ac_mul_B!(y, A, x)
 end
 
 @inbounds function Ac_mul_B!(y::StridedArray{T, 2}, A::CenteredSparseCSC{T, S},
@@ -209,13 +205,13 @@ end
     for j in 1:m
         k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
         r = view(A.A.rowval, k)
-        #notr = inv_index!(view(row_idx_pool, 1:(n-length(r))), r, n)
         notr = NotRow(A, r)
-        y[j, :] = view(y, j, :) .+
+        y[j, :] .= view(y, j, :) .+
             reshape(sum(view(A.A.nzval, k) .* view(x, r, :), 1), K, 1)
-        y[j, :] = view(y, j, :) .-
+        y[j, :] .= view(y, j, :) .-
                     A.centers[j] .* reshape(sum(view(x, notr, :), 1), K, 1)
     end
+    return y
 end
 
 
