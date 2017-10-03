@@ -92,8 +92,7 @@ copy(A::CenteredSparseCSC) = CenteredSparseCSC(A.A, docopy=true,
                                                recenter=false)
 size(A::CenteredSparseCSC, args...) = size(A.A, args...)
 
-*(A::CenteredSparseCSC, x::StridedVector{T}) where T = A_mul_B(A, x)
-*(A::CenteredSparseCSC, x::StridedArray{T}) where T = A_mul_B(A, x)
+*(A::CenteredSparseCSC, x::StridedVecOrMat{T}) where T = A_mul_B(A, x)
 
 # return a cell
 function getindex(A::CenteredSparseCSC{T}, row::Integer, column::Integer) where {T}
@@ -135,12 +134,13 @@ function A_mul_B(A::CenteredSparseCSC{T, S},
     return A_mul_B!(y, A, x)
 end
 
-function A_mul_B!(y::StridedVecOrMat{T}, A::CenteredSparseCSC{T, S},
+@inbounds function A_mul_B!(y::StridedVecOrMat{T}, A::CenteredSparseCSC{T, S},
                   x::StridedVecOrMat{T}) where {T, S}
-    y[:] = 0
     n, m = size(A)
+    m == size(x, 1) || throw(DimensionMismatch("rows of x do not match cols of A"))
+    y[:] = 0
     A_mul_B!(y, A.A, x) # I don't know how to inline this for one loop :(
-    @inbounds for j in 1:m
+    @simd for j in 1:m
         k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
         notr = NotRow(A, view(A.A.rowval, k))
         y[notr, :] .= view(y, notr, :) .- A.centers[j] .* view(x, j:j, :)
@@ -171,11 +171,12 @@ function Ac_mul_B(A::CenteredSparseCSC{T, S},
     return Ac_mul_B!(y, A, x)
 end
 
-function Ac_mul_B!(y::StridedVecOrMat{T}, A::CenteredSparseCSC{T, S},
+@inbounds function Ac_mul_B!(y::StridedVecOrMat{T}, A::CenteredSparseCSC{T, S},
                    x::StridedVecOrMat{T}) where {T, S}
     n, m = size(A)
+    n == size(x, 1) || throw(DimensionMismatch("rows of x do not match rows of A"))
     y[:] = 0
-    @inbounds for j in 1:m
+    @simd for j in 1:m
         k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
         r = view(A.A.rowval, k)
         notr = NotRow(A, r)
@@ -260,8 +261,8 @@ end
 #end
 
 function isapprox(a::Base.LinAlg.SVD, b::Base.LinAlg.SVD)
-    # signs by columns of U, rows of Vt
     length(a.S) != length(b.S) && return false
+    # signs by columns of U, rows of Vt
     signsU = [sign(a.U[1,j]) * sign(b.U[1, j]) for j in 1:size(a.U, 2)]'
     signsVt = [sign(a.Vt[i,1]) * sign(b.Vt[i, 1]) for i in 1:size(a.Vt, 1)]
     return isapprox(a.S, b.S) &&
