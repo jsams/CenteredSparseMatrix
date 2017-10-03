@@ -223,22 +223,6 @@ end
 end
 
 
-# using StatsBase
-# y = rand(100, 10)
-# n = size(y, 1)
-# loops = 3
-# idxpool = zeros(Int64, n);
-# accum = [tuple(zeros(2,2), zeros(2,2)) for j in 1:3];
-# for j in 1:loops
-#     nidx = sample(1:n, 1)[1]
-#     to_invert = sort!(sample(1:n, nidx, replace=false))
-#     r = n - length(to_invert)
-#     accum[j] = (y[to_invert, :], y[inv_index!(view(idxpool, 1:r), to_invert, n), :])
-# end
-
-
-
-
 #function scale_sd(A::CenteredSparseCSC{T, S}) where {T, S}
 #    X = copy(A)
 #    return scale_sd!(X)
