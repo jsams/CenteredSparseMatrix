@@ -9,6 +9,8 @@ make the display of the matrix work in a reasonable manner. That said, using
 the type is easy:
 
 ```
+#Pkg.clone("git@github.com:jsams/CenteredSparseMatrix.git")
+
 using CenteredSparseMatrix
 
 X = sprand(10, 3, 0.6)
