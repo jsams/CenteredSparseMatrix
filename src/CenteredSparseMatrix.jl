@@ -6,6 +6,8 @@
 # * see methodswith(SparseMatrixCSC) for a todo list
 # * some kind of benchmarking suite would be nice
 # * remove reshape and get view indices right in Ac_mul_B
+# * if using @inbounds...should probably double check shape
+# * StridedVecOrMat for all if speed permits, if not, StridedMatrix
 
 
 
@@ -184,50 +186,25 @@ end
 # A'*B
 
 function Ac_mul_B(A::CenteredSparseCSC{T, S},
-                  x::StridedVector{T}) where T where S
-    y = zeros(size(A, 2))
-    return Ac_mul_B!(y, A, x)
-end
-
-@inbounds function Ac_mul_B!(y::StridedVector{T}, A::CenteredSparseCSC{T, S},
-                   x::StridedVector{T}) where T where S
-    y[:] = 0
-    n = size(A, 1)
-    m = size(A, 2)
-    for j in 1:m
-        k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
-        r = view(A.A.rowval, k)
-        notr = NotRow(A, r)
-        y[j:j] = view(y, j) .+ sum(view(A.A.nzval, k) .* view(x, r))
-        y[j:j] = view(y, j) .- A.centers[j] * sum(view(x, notr))
-    end
-    return y
-end
-
-function Ac_mul_B(A::CenteredSparseCSC{T, S},
                   x::StridedArray{T, 2}) where T where S
     y = zeros(size(A, 2), size(x, 2))
     return Ac_mul_B!(y, A, x)
 end
 
-@inbounds function Ac_mul_B!(y::StridedArray{T, 2}, A::CenteredSparseCSC{T, S},
-                   x::StridedArray{T, 2}) where T where S
+function Ac_mul_B!(y::StridedVecOrMat{T}, A::CenteredSparseCSC{T, S},
+                   x::StridedVecOrMat{T}) where T where S
+    n, m = size(A)
     y[:] = 0
-    n = size(A, 1)
-    m = size(A, 2)
-    K = size(x, 2)
-    for j in 1:m
+    @inbounds for j in 1:m
         k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
         r = view(A.A.rowval, k)
         notr = NotRow(A, r)
-        y[j, :] = view(y, j, :) .+
-            reshape(sum(view(A.A.nzval, k) .* view(x, r, :), 1), K, 1)
-        y[j, :] = view(y, j, :) .-
-                    A.centers[j] .* reshape(sum(view(x, notr, :), 1), K, 1)
+        y[j:j, :] .= view(y, j:j, :) .+
+                    sum(view(A.A.nzval, k) .* view(x, r, :), 1) .-
+                    A.centers[j] .* sum(view(x, notr, :), 1)
     end
     return y
 end
-
 
 # some utility functions
 
