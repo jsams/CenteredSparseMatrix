@@ -82,7 +82,7 @@ end
     starting with a SparseMatrixCSC
 """
 function CenteredSparseCSC(i::S, j::S, x::T, m::S=max(i), n::S=max(j),
-                           combine::Function=+) where S where T
+                           combine::Function=+) where {S, T}
     A = sparse(i, j, x, m, n, combine)
     CenteredSparseCSC(A, docopy=false)
 end
@@ -130,33 +130,13 @@ getindex(A::CenteredSparseCSC, ::Colon, ::Colon) = copy(A)
 
 
 function A_mul_B(A::CenteredSparseCSC{T, S},
-                 x::StridedVector{T}) where T where S
-    y = zeros(size(A, 1))
-    return A_mul_B!(y, A, x)
-end
-
-@inbounds function A_mul_B!(y::StridedVector{T}, A::CenteredSparseCSC{T, S},
-                  x::StridedVector{T}) where {T, S}
-    y[:] = 0
-    n, m = size(A)
-    for j in 1:m
-        k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
-        r = view(A.A.rowval, k)
-        notr = NotRow(A, r)
-        y[r] = view(y, r) .+ view(A.A.nzval, k) .* x[j]
-        y[notr] = view(y, notr) .- A.centers[j] .* x[j]
-    end
-    return y
-end
-
-function A_mul_B(A::CenteredSparseCSC{T, S},
-                 x::StridedArray{T, 2}) where T where S
+                 x::StridedVecOrMat{T}) where {T, S}
     y = zeros(size(A, 1), size(x, 2))
     return A_mul_B!(y, A, x)
 end
 
-function A_mul_B!(y::StridedArray{T, 2}, A::CenteredSparseCSC{T, S},
-                  x::StridedArray{T, 2}) where T where S
+function A_mul_B!(y::StridedVecOrMat{T}, A::CenteredSparseCSC{T, S},
+                  x::StridedVecOrMat{T}) where {T, S}
     y[:] = 0
     n, m = size(A)
     A_mul_B!(y, A.A, x) # I don't know how to inline this for one loop :(
@@ -169,8 +149,8 @@ function A_mul_B!(y::StridedArray{T, 2}, A::CenteredSparseCSC{T, S},
 end
 
 # still not as fast as A_mul_B!, but getting close, worth keeping just in case!
-function A_mul_B1!(y::StridedArray{T, 2}, A::CenteredSparseCSC{T, S},
-                  x::StridedArray{T, 2}) where T where S
+function A_mul_B1!(y::StridedVecOrMat{T}, A::CenteredSparseCSC{T, S},
+                  x::StridedVecOrMat{T}) where {T, S}
     y[:] = 0
     n, m = size(A)
     @inbounds for j in 1:m
@@ -186,13 +166,13 @@ end
 # A'*B
 
 function Ac_mul_B(A::CenteredSparseCSC{T, S},
-                  x::StridedArray{T, 2}) where T where S
+                  x::StridedVecOrMat{T}) where {T, S}
     y = zeros(size(A, 2), size(x, 2))
     return Ac_mul_B!(y, A, x)
 end
 
 function Ac_mul_B!(y::StridedVecOrMat{T}, A::CenteredSparseCSC{T, S},
-                   x::StridedVecOrMat{T}) where T where S
+                   x::StridedVecOrMat{T}) where {T, S}
     n, m = size(A)
     y[:] = 0
     @inbounds for j in 1:m
