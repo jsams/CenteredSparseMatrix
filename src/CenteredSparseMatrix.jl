@@ -166,6 +166,21 @@ function A_mul_B!(y::StridedArray{T, 2}, A::CenteredSparseCSC{T, S},
     return y
 end
 
+# still not as fast as A_mul_B!, but getting close, worth keeping just in case!
+function A_mul_B1!(y::StridedArray{T, 2}, A::CenteredSparseCSC{T, S},
+                  x::StridedArray{T, 2}) where T where S
+    y[:] = 0
+    n, m = size(A)
+    @inbounds for j in 1:m
+        k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
+        r = view(A.A.rowval, k)
+        notr = NotRow(A, r)
+        y[r, :] .= view(y, r, :) .+ view(A.A.nzval, k) .* view(x, j:j, :)
+        y[notr, :] .= view(y, notr, :) .- A.centers[j] .* view(x, j:j, :)
+    end
+    return y
+end
+
 # A'*B
 
 function Ac_mul_B(A::CenteredSparseCSC{T, S},

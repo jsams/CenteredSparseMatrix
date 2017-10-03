@@ -32,6 +32,7 @@ Z = zeros(size(Acs, 1), size(X, 2));
 @test isapprox(Acd * x, A_mul_B!(z, Acs, x))
 @test isapprox(Acd * X, Acs * X)
 @test isapprox(Acd * X, A_mul_B!(Z, Acs, X))
+@test isapprox(Acd * X, CenteredSparseMatrix.A_mul_B1!(Z, Acs, X))
 
 @test isapprox(Acd' * y, Ac_mul_B(Acs, y))
 @test isapprox(Acd' * y, Acs' * y)
