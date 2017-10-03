@@ -153,15 +153,14 @@ function A_mul_B(A::CenteredSparseCSC{T, S},
     return A_mul_B!(y, A, x)
 end
 
-@inbounds function A_mul_B!(y::StridedArray{T, 2}, A::CenteredSparseCSC{T, S},
+function A_mul_B!(y::StridedArray{T, 2}, A::CenteredSparseCSC{T, S},
                   x::StridedArray{T, 2}) where T where S
     y[:] = 0
     n, m = size(A)
-    for j in 1:m
+    A_mul_B!(y, A.A, x) # I don't know how to inline this for one loop :(
+    @inbounds for j in 1:m
         k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
-        r = view(A.A.rowval, k)
-        notr = NotRow(A, r)
-        y[r, :] .= view(y, r, :) .+ view(A.A.nzval, k) * view(x, j:j, :)
+        notr = NotRow(A, view(A.A.rowval, k))
         y[notr, :] .= view(y, notr, :) .- A.centers[j] .* view(x, j:j, :)
     end
     return y
