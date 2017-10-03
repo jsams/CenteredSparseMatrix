@@ -5,9 +5,6 @@
 #   https://github.com/mbauman/InvertedIndices.jl/issues/1
 # * see methodswith(SparseMatrixCSC) for a todo list
 # * some kind of benchmarking suite would be nice
-# * remove reshape and get view indices right in Ac_mul_B
-# * if using @inbounds...should probably double check shape
-# * StridedVecOrMat for all if speed permits, if not, StridedMatrix
 
 
 
@@ -194,6 +191,9 @@ end
 # assumes, without checking, that to_remove is sorted!!!!!
 # assumes, without checking, that to_keep is precisely least n-length(to_remove) long!
 @inbounds function inv_index!(to_keep, to_remove, n::Integer)
+    if length(to_keep) + length(to_remove) != n
+        throw(DimensionMismatch("length of to_keep and to_remove must match n"))
+    end
     if isempty(to_remove)
         to_keep[1:n] = 1:n
         return to_keep
