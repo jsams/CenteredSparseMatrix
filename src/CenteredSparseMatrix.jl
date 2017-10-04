@@ -28,7 +28,7 @@ export CenteredSparseCSC, NotRow,
 """
 struct CenteredSparseCSC{T, S} <: AbstractSparseMatrix{T, S}
     A::SparseMatrixCSC{T, S}
-    centers::Array{Float64, 2} # excludes complex, but don't know what i'm doing
+    centers::Vector{T} #something like this: typeof(zero(T) / one(T))}
     row_idx_pool::Array{S, 1}
 end
 
@@ -47,16 +47,10 @@ end
     Note that setting docopy=false may have unexpected consequences on your
     original data
 """
-function CenteredSparseCSC(A::SparseMatrixCSC{T, S}; docopy::Bool=true, recenter=true,
-                           centers=mean(A,1)) where {S, T}
+function CenteredSparseCSC(A::SparseMatrixCSC{T, S}; docopy::Bool=true,
+                           centers=vec(mean(A, 1))) where {S, T}
     if docopy
         A = copy(A)
-    end
-    if recenter
-        for j in 1:size(A, 2)
-            k = A.colptr[j]:(A.colptr[j+1] - 1)
-            A.nzval[k] = view(A.nzval, k) .- centers[j]
-        end
     end
     CenteredSparseCSC(A, centers, zeros(S, size(A, 1)))
 end
@@ -85,21 +79,14 @@ function CenteredSparseCSC(i::S, j::S, x::T, m::S=max(i), n::S=max(j),
 end
 
 copy(A::CenteredSparseCSC) = CenteredSparseCSC(A.A, docopy=true,
-                                               centers=A.centers,
-                                               recenter=false)
+                                               centers=A.centers)
 size(A::CenteredSparseCSC, args...) = size(A.A, args...)
 
 *(A::CenteredSparseCSC, x::StridedVecOrMat{T}) where T = A_mul_B(A, x)
 
 # return a cell
 function getindex(A::CenteredSparseCSC{T}, row::Integer, column::Integer) where {T}
-    r = A.A.rowval[A.A.colptr[column]:(A.A.colptr[column+1]-1)]
-    if row in r
-        return A.A[row, column]
-    else
-        return -A.centers[column]
-    end
-    #A.A[row, column] - A.centers[column]
+    A.A[row, column] - A.centers[column]
 end
 
 # return a row
@@ -137,26 +124,7 @@ end
     m == size(x, 1) || throw(DimensionMismatch("rows of x do not match cols of A"))
     y[:] = 0
     A_mul_B!(y, A.A, x) # I don't know how to inline this for one loop :(
-    @simd for j in 1:m
-        k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
-        notr = NotRow(A, view(A.A.rowval, k))
-        y[notr, :] .= view(y, notr, :) .- A.centers[j] .* view(x, j:j, :)
-    end
-    return y
-end
-
-# still not as fast as A_mul_B!, but getting close, worth keeping just in case!
-function A_mul_B1!(y::StridedVecOrMat{T}, A::CenteredSparseCSC{T, S},
-                  x::StridedVecOrMat{T}) where {T, S}
-    y[:] = 0
-    n, m = size(A)
-    @inbounds for j in 1:m
-        k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
-        r = view(A.A.rowval, k)
-        notr = NotRow(A, r)
-        y[r, :] .= view(y, r, :) .+ view(A.A.nzval, k) .* view(x, j:j, :)
-        y[notr, :] .= view(y, notr, :) .- A.centers[j] .* view(x, j:j, :)
-    end
+    y[:, :] .-= A.centers' * x
     return y
 end
 
@@ -173,19 +141,12 @@ end
     n, m = size(A)
     n == size(x, 1) || throw(DimensionMismatch("rows of x do not match rows of A"))
     y[:] = 0
-    @simd for j in 1:m
-        k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
-        r = view(A.A.rowval, k)
-        notr = NotRow(A, r)
-        y[j:j, :] .= view(y, j:j, :) .+
-                    sum(view(A.A.nzval, k) .* view(x, r, :), 1) .-
-                    A.centers[j] .* sum(view(x, notr, :), 1)
-    end
+    Ac_mul_B!(y, A.A, x)
+    y[:, :] -= A.centers .* sum(x, 1)
     return y
 end
 
 # some utility functions
-
 
 # allows equivalent of A[-x] in R, assumes x is vector,
 # assumes, without checking, that to_remove is sorted!!!!!
