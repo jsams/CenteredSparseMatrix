@@ -32,6 +32,6 @@ The key point is that the sparsity structure of the matrix is left unchanged,
 the centering of the zero-elements is done on-demand, and where possible, algorithms
 take advantage of knowing the column-constant mean value.
 
-I've tried adapting the gapxy algorithms in an efficient manner to this use
-case, but suggestions to improve efficiency are welcome.
-
+For the matrix multiplications `X_cent_sparse  * Y` and `X_cent_sparse' * Z`, there
+is nearly zero overhead compared to the plain sparse multiplications `X * Y`
+and `X' * Z`.
