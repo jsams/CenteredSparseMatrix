@@ -5,6 +5,7 @@
 #   https://github.com/mbauman/InvertedIndices.jl/issues/1
 # * see methodswith(SparseMatrixCSC) for a todo list
 # * some kind of benchmarking suite would be nice
+# * there's a lot of memory allocations, can that be reduced?
 
 
 
@@ -114,7 +115,7 @@ getindex(A::CenteredSparseCSC, ::Colon, ::Colon) = copy(A)
 
 function A_mul_B(A::CenteredSparseCSC{T, S},
                  x::StridedVecOrMat{T}) where {T, S}
-    y = zeros(size(A, 1), size(x, 2))
+    y = zeros(T, size(A, 1), size(x, 2))
     return A_mul_B!(y, A, x)
 end
 
@@ -123,16 +124,31 @@ end
     n, m = size(A)
     m == size(x, 1) || throw(DimensionMismatch("rows of x do not match cols of A"))
     y[:] = 0
-    A_mul_B!(y, A.A, x) # I don't know how to inline this for one loop :(
+    A_mul_B!(y, A.A, x)
     y[:, :] .-= A.centers' * x
     return y
 end
 
 # A'*B
+function At_mul_B(A::CenteredSparseCSC{T, S},
+                  x::StridedVecOrMat{T}) where {T, S}
+    y = zeros(T, size(A, 2), size(x, 2))
+    return At_mul_B!(y, A, x)
+end
+
+@inbounds function At_mul_B!(y::StridedVecOrMat{T}, A::CenteredSparseCSC{T, S},
+                   x::StridedVecOrMat{T}) where {T, S}
+    n, m = size(A)
+    n == size(x, 1) || throw(DimensionMismatch("rows of x do not match rows of A"))
+    y[:] = 0
+    At_mul_B!(y, A.A, x)
+    y[:, :] -= A.centers .* sum(x, 1)
+    return y
+end
 
 function Ac_mul_B(A::CenteredSparseCSC{T, S},
                   x::StridedVecOrMat{T}) where {T, S}
-    y = zeros(size(A, 2), size(x, 2))
+    y = zeros(T, size(A, 2), size(x, 2))
     return Ac_mul_B!(y, A, x)
 end
 
@@ -142,7 +158,7 @@ end
     n == size(x, 1) || throw(DimensionMismatch("rows of x do not match rows of A"))
     y[:] = 0
     Ac_mul_B!(y, A.A, x)
-    y[:, :] -= A.centers .* sum(x, 1)
+    y[:, :] -= conj.(A.centers) .* sum(x, 1)
     return y
 end
 

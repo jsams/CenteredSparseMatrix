@@ -38,11 +38,22 @@ W = zeros(size(A, 2), size(X, 2))
 @test isapprox(Acd * X, A_mul_B!(Z, Acs, X))
 
 @test isapprox(Acd' * y, Ac_mul_B(Acs, y))
+@test isapprox(Acd' * y, At_mul_B(Acs, y))
 @test isapprox(Acd' * y, Acs' * y)
 @test isapprox(Acd' * y, Acs'y)
 
 @test isapprox(Acd' * Y, Ac_mul_B(Acs, Y))
+@test isapprox(Acd' * Y, At_mul_B(Acs, Y))
 
 @test isapprox(Acd' * Y, Acs' * Y)
 @test isapprox(Acd' * Y, Acs'Y)
+
+# test complex values for the conjugate stuff
+A = sprand(Complex64, n, m, d)
+Acd = full(A .- mean(A, 1));
+Acs = CenteredSparseCSC(A);
+
+Y = rand(Complex64, n, k);
+
+@test isapprox(Ac_mul_B(Acd, Y), Ac_mul_B(Acs, Y))
 
