@@ -6,6 +6,7 @@
 # * see methodswith(SparseMatrixCSC) for a todo list
 # * some kind of benchmarking suite would be nice
 # * there's a lot of memory allocations, can that be reduced?
+# * if given Ints in constructor, copy to Float
 
 
 
@@ -18,64 +19,79 @@ __precompile__()
 module CenteredSparseMatrix
 
 import Base:
-        copy, getindex, isapprox, size, *, A_mul_B!, Ac_mul_B!, Ac_mul_B
+        copy, getindex, isapprox, size, *,
+        A_mul_B!, Ac_mul_B!, Ac_mul_B, At_mul_B!, At_mul_B
 
 export CenteredSparseCSC, NotRow,
-        copy, getindex, isapprox, size, *, A_mul_B!, Ac_mul_B!, Ac_mul_B
+        copy, getindex, isapprox, size, *,
+        A_mul_B!, Ac_mul_B!, Ac_mul_B, At_mul_B!, At_mul_B
 """
     CenteredSparseCSC{Tv, Ti<:Integer} <: AbstractSparseMatrix{Tv, Ti}
 
-    Matrix type for storing matrices that would be sparse if left un-centered
+Matrix type for storing matrices that would be sparse if left un-centered
 """
-struct CenteredSparseCSC{T, S} <: AbstractSparseMatrix{T, S}
-    A::SparseMatrixCSC{T, S}
-    centers::Vector{T} #something like this: typeof(zero(T) / one(T))}
-    row_idx_pool::Array{S, 1}
+struct CenteredSparseCSC{Tv, Ti} <: AbstractSparseMatrix{Tv, Ti}
+    A::SparseMatrixCSC{Tv, Ti}
+    centers::Vector{Tv}
+    row_idx_pool::Array{Ti, 1}
 end
 
 """
-    CenteredSparseCSC(A::SparseMatrixCSC, docopy=true, recenter=true, centers=mean(A, 1))
+    CenteredSparseCSC(A::SparseMatrixCSC, docopy=true, centers=mean(A, 1))
 
-    Create a CenteredSparseCSC from a sparse matrix
+Create a CenteredSparseCSC from a sparse matrix
 
-    # Arguments
-    - `A`, a SparseMatrix in CSC format
-    - `docopy` whether to copy the data in A or assign by reference. default true
-    - `recenter` whether to recenter the data in A or is it already centered. default true
-    - `centers` what are the centers to use for doing the recentering. defaults
-      to column means. Must have same length as the number of columns.
+# Arguments
+- `A`, a SparseMatrix in CSC format
+- `docopy` whether to copy the data in A or assign by reference. default true
+- `centers` what are the centers to use for doing the recentering. defaults
+  to column means. Must have same length as the number of columns.
 
-    Note that setting docopy=false may have unexpected consequences on your
-    original data
+Note that setting docopy=false may (or may not!) alter your original data.
 """
-function CenteredSparseCSC(A::SparseMatrixCSC{T, S}; docopy::Bool=true,
-                           centers=vec(mean(A, 1))) where {S, T}
+function CenteredSparseCSC(A::SparseMatrixCSC{Tv, Ti}; docopy::Bool=true,
+                           centers=vec(mean(A, 1))) where {Tv, Ti}
+    newTv = typeof(zero(Tv) / one(Tv))
     if docopy
-        A = copy(A)
+        if newTv == Tv
+            A = copy(A)
+        else
+            A = convert(SparseMatrixCSC{newTv}, A)
+        end
+    elseif !docopy && newTv != Tv
+        warn("input matrix of incompatible type, must promote and therefore copy")
+        A = convert(SparseMatrixCSC{newTv}, A)
     end
-    CenteredSparseCSC(A, centers, zeros(S, size(A, 1)))
+    CenteredSparseCSC(A, centers, zeros(Ti, size(A, 1)))
 end
 
 """
-    CenteredSparseCSC(A::Array{T, 2})
+    CenteredSparseCSC(A::Array{Tv, 2})
 
-    Create a CenteredSparseCSC from a dense array.
+Create a CenteredSparseCSC from a dense array.
 """
-function CenteredSparseCSC(A::Array{T, 2}) where T
-    CenteredSparseCSC(sparse(A), docopy=false)
+function CenteredSparseCSC(A::Array{Tv, 2}) where Tv
+    newTv = typeof(zero(Tv) / one(Tv))
+    newA = sparse(A)
+    if Tv != newTv
+        newA = convert(SparseMatrixCSC{newTv}, newA)
+    end
+    CenteredSparseCSC(newA, docopy=false)
 end
 
 """
     CenteredSparseCSC(i, j, x, [m, n, combine])
 
-    Create a CenteredSparseCSC using the usual method of constructing a sparse matrix
+Create a CenteredSparseCSC using the usual method of constructing a sparse matrix
 
-    See `?sparse` for meaning of arguments. If you need more flexibility, use constructor
-    starting with a SparseMatrixCSC
+See `?sparse` for meaning of arguments. If you need more flexibility, use constructor
+starting with a SparseMatrixCSC
 """
-function CenteredSparseCSC(i::S, j::S, x::T, m::S=max(i), n::S=max(j),
-                           combine::Function=+) where {S, T}
-    A = sparse(i, j, x, m, n, combine)
+function CenteredSparseCSC(i::AbstractVector{Ti}, j::AbstractVector{Ti},
+                           x::AbstractVector{Tv}, m::Ti=max(i), n::Ti=max(j),
+                           combine::Function=+) where {Tv, Ti}
+    newTv = typeof(zero(Tv) / one(Tv))
+    A = sparse(i, j, newTv == Tv ? x : convert(AbstractVector{newTv}, x), m, n, combine)
     CenteredSparseCSC(A, docopy=false)
 end
 
@@ -83,15 +99,15 @@ copy(A::CenteredSparseCSC) = CenteredSparseCSC(A.A, docopy=true,
                                                centers=A.centers)
 size(A::CenteredSparseCSC, args...) = size(A.A, args...)
 
-*(A::CenteredSparseCSC, x::StridedVecOrMat{T}) where T = A_mul_B(A, x)
+*(A::CenteredSparseCSC, x::StridedVecOrMat) = A_mul_B(A, x)
 
 # return a cell
-function getindex(A::CenteredSparseCSC{T}, row::Integer, column::Integer) where {T}
+function getindex(A::CenteredSparseCSC{Tv}, row::Integer, column::Integer) where {Tv}
     A.A[row, column] - A.centers[column]
 end
 
 # return a row
-#function getindex(A::CenteredSparseCSC{T, S}, row::S) where {T, S}
+#function getindex(A::CenteredSparseCSC{Tv, Ti}, row::Ti) where {Tv, Ti}
 #    A.A[row, :] - A.centers
 #end
 
@@ -100,7 +116,7 @@ getindex(A::CenteredSparseCSC, ::Colon, ::Colon) = copy(A)
 #getindex(A::CenteredSparseCSC, ::Colon, column) = getindex(A, 1:size(A,1), column)
 
 
-#function getindex(A::CenteredSparseCSC, ::Colon,  columns::S) where {T, S}
+#function getindex(A::CenteredSparseCSC, ::Colon,  columns::Ti) where Ti
 #    A.A[:, columns] - A.centers[columns]
 #end
 
@@ -112,32 +128,44 @@ getindex(A::CenteredSparseCSC, ::Colon, ::Colon) = copy(A)
 #    full(A.A[args...]) .- A.centers[cinds]
 #end
 
+"""
+    sparse matrix times dense vector-or-matrix multiplication
 
-function A_mul_B(A::CenteredSparseCSC{T, S},
-                 x::StridedVecOrMat{T}) where {T, S}
-    y = zeros(T, size(A, 1), size(x, 2))
+Takes advantage of the decomposition, `Ac = (A - V1 * M')`, where `Ac` is the
+centered matrix, `A` is the original matrix, `M` is the vector of column means
+of `A` and `V1` is an `n`x`1` vector of ones (where `A` is `n`x`m`).
+
+Then:
+`Ac * X = (A - V1 * M') * X = AX - V1 * M' * X`
+* The product `AX` is the usual sparse * dense multiplication.
+* the product `M' * X` is a dense vector-matrix that we can do as usual
+* and the `- V1 *` can be replaced by a broadcast operation
+"""
+function A_mul_B(A::CenteredSparseCSC{Tv, Ti},
+                 x::StridedVecOrMat{Tv2}) where {Tv<:Number, Ti<:Integer, Tv2<:Number}
+    y = zeros(Tv, size(A, 1), size(x, 2))
     return A_mul_B!(y, A, x)
 end
 
-@inbounds function A_mul_B!(y::StridedVecOrMat{T}, A::CenteredSparseCSC{T, S},
-                  x::StridedVecOrMat{T}) where {T, S}
+@inbounds function A_mul_B!(y::StridedVecOrMat{Tv}, A::CenteredSparseCSC{Tv, Ti},
+                  x::StridedVecOrMat{Tv2}) where {Tv<:Number, Ti<:Integer, Tv2<:Number}
     n, m = size(A)
     m == size(x, 1) || throw(DimensionMismatch("rows of x do not match cols of A"))
     y[:] = 0
     A_mul_B!(y, A.A, x)
-    y[:, :] .-= A.centers' * x
+    y[:, :] .-= A.centers.' * x
     return y
 end
 
 # A'*B
-function At_mul_B(A::CenteredSparseCSC{T, S},
-                  x::StridedVecOrMat{T}) where {T, S}
-    y = zeros(T, size(A, 2), size(x, 2))
+function At_mul_B(A::CenteredSparseCSC{Tv, Ti},
+                  x::StridedVecOrMat{Tv2}) where {Tv<:Number, Ti<:Integer, Tv2<:Number}
+    y = zeros(Tv, size(A, 2), size(x, 2))
     return At_mul_B!(y, A, x)
 end
 
-@inbounds function At_mul_B!(y::StridedVecOrMat{T}, A::CenteredSparseCSC{T, S},
-                   x::StridedVecOrMat{T}) where {T, S}
+@inbounds function At_mul_B!(y::StridedVecOrMat{Tv}, A::CenteredSparseCSC{Tv, Ti},
+                   x::StridedVecOrMat{Tv2}) where {Tv<:Number, Ti<:Integer, Tv2<:Number}
     n, m = size(A)
     n == size(x, 1) || throw(DimensionMismatch("rows of x do not match rows of A"))
     y[:] = 0
@@ -146,14 +174,14 @@ end
     return y
 end
 
-function Ac_mul_B(A::CenteredSparseCSC{T, S},
-                  x::StridedVecOrMat{T}) where {T, S}
-    y = zeros(T, size(A, 2), size(x, 2))
+function Ac_mul_B(A::CenteredSparseCSC{Tv, Ti},
+                  x::StridedVecOrMat{Tv2}) where {Tv<:Number, Ti<:Integer, Tv2<:Number}
+    y = zeros(Tv, size(A, 2), size(x, 2))
     return Ac_mul_B!(y, A, x)
 end
 
-@inbounds function Ac_mul_B!(y::StridedVecOrMat{T}, A::CenteredSparseCSC{T, S},
-                   x::StridedVecOrMat{T}) where {T, S}
+@inbounds function Ac_mul_B!(y::StridedVecOrMat{Tv}, A::CenteredSparseCSC{Tv, Ti},
+                   x::StridedVecOrMat{Tv2}) where {Tv<:Number, Ti<:Integer, Tv2<:Number}
     n, m = size(A)
     n == size(x, 1) || throw(DimensionMismatch("rows of x do not match rows of A"))
     y[:] = 0
@@ -194,8 +222,8 @@ end
     return to_keep
 end
 
-@inbounds function NotRow(A::CenteredSparseCSC{T, S},
-                          to_remove::AbstractArray{S, 1}) where {T, S}
+@inbounds function NotRow(A::CenteredSparseCSC{Tv, Ti},
+                          to_remove::AbstractArray{Ti, 1}) where {Tv, Ti}
     to_keep = view(A.row_idx_pool, 1:(size(A, 1) - length(to_remove)))
     return inv_index!(to_keep, to_remove, size(A, 1))
 end
