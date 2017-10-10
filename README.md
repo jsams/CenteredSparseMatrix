@@ -33,5 +33,8 @@ the centering of the zero-elements is done on-demand, and where possible, algori
 take advantage of knowing the column-constant mean value.
 
 For the matrix multiplications `X_cent_sparse  * Y` and `X_cent_sparse' * Z`, there
-is nearly zero overhead compared to the plain sparse multiplications `X * Y`
-and `X' * Z`.
+is minimal overhead compared to the plain sparse multiplications `X * Y` and `X' * Z`,
+requiring only an extra dense vector-matrix multiply and subtraction.
+
+Using Int64 value types is not advised.
+

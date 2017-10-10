@@ -14,9 +14,10 @@ d = 0.4
 
 k = 2
 
-#T = Int64
+#for T = Int64
 #for T in (Int32, Int64, Float32, Float64, Complex64, Complex128)
 for T in (Int32, Float32, Float64, Complex64, Complex128)
+    print(T, " started... ")
     A = sprand(T, n, m, d);
     Acd = full(A .- mean(A, 1));
     Acs = CenteredSparseCSC(A);
@@ -72,5 +73,14 @@ for T in (Int32, Float32, Float64, Complex64, Complex128)
     @test isapprox(Acd.' * Y, At_mul_B(Acs, Y))
     @test isapprox(Acd.' * Y, Acs.' * Y)
     @test isapprox(Acd.' * Y, Acs.'Y)
+
+    if !(T <: Complex)
+        Acd2 = copy(Acd)
+        @test isapprox(scale!(Acd2, 1 ./ vec(std(Acd2, 1))), scale_sd!(Acs2))
+        # can't find an appropriate scale_sd...?!
+        #@test isapprox(scale!(Acd2, 1 ./ vec(std(Acd2, 1))), scale_sd(Acs2))
+    end
+
+    println(T, " complete")
 end
 

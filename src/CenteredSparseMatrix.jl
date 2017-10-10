@@ -19,11 +19,11 @@ __precompile__()
 module CenteredSparseMatrix
 
 import Base:
-        copy, getindex, isapprox, size, *,
+        copy, full, getindex, isapprox, size, *,
         A_mul_B!, Ac_mul_B!, Ac_mul_B, At_mul_B!, At_mul_B
 
-export CenteredSparseCSC, NotRow,
-        copy, getindex, isapprox, size, *,
+export CenteredSparseCSC, NotRow, scale_sd!, scale_sd
+        copy, full, getindex, isapprox, size, *,
         A_mul_B!, Ac_mul_B!, Ac_mul_B, At_mul_B!, At_mul_B
 """
     CenteredSparseCSC{Tv, Ti<:Integer} <: AbstractSparseMatrix{Tv, Ti}
@@ -95,6 +95,7 @@ function CenteredSparseCSC(i::AbstractVector{Ti}, j::AbstractVector{Ti},
     CenteredSparseCSC(A, docopy=false)
 end
 
+full(A::CenteredSparseCSC) = full(A.A) .- A.centers'
 copy(A::CenteredSparseCSC) = CenteredSparseCSC(A.A, docopy=true,
                                                centers=A.centers)
 size(A::CenteredSparseCSC, args...) = size(A.A, args...)
@@ -229,33 +230,82 @@ end
 end
 
 
-#function scale_sd(A::CenteredSparseCSC{T, S}) where {T, S}
-#    X = copy(A)
-#    return scale_sd!(X)
-#end
-#
-## b/c broadcasting on sparse matrices is broken, and scale is undefined
-#function scale_sd!(A::CenteredSparseCSC{T, S}) where {T, S}
-#    scale_sd!(A.A)
-#    return A
-#end
-#
-#function scale_sd(A::SparseMatrixCSC{T, S}) where {T, S}
-#    X = copy(A)
-#    return scale_sd!(X)
-#end
-#
-#function scale_sd!(A::SparseMatrixCSC{T, S}) where {T, S}
-#    n = size(A, 1)
-#    mn = 0.
-#    for j in 1:size(A, 2)
-#        k = A.colptr[j]:(A.colptr[j+1] - 1)
-#        v = view(A.nzval, k)
-#        mn = mean(v) * (length(v) / n)
-#        A.nzval[k] = v ./ sqrt(sum(v.^2) / (n-1) - mn^2)
-#    end
-#    return A
-#end
+function scale_sd(A::CenteredSparseCSC, corrected=true)
+    return scale_sd!(copy(A), corrected=corrected)
+end
+
+# b/c broadcasting on sparse matrices is broken, and scale is undefined
+function scale_sd!(A::CenteredSparseCSC, corrected=true)
+    return (corrected ? _sd_scale_corrected!(A) : _sd_scale_uncorrected!(A))
+end
+
+function _sd_scale_corrected!(A::CenteredSparseCSC)
+    n = size(A, 1)
+    @inbounds @simd for j in 1:size(A, 2)
+        k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
+        if length(k) > 0
+            v = view(A.A.nzval, k)
+            mn = mean(v) * (length(k) / n)
+            sd = sqrt(sum(vi^2 for vi in v) / (n - 1) - (n / (n - 1)) * mn^2)
+            A.A.nzval[k] .= v ./ sd
+            A.centers[j] ./= sd
+        end
+    end
+    return A
+end
+
+function _sd_scale_uncorrected!(A::CenteredSparseCSC)
+    n = size(A, 1)
+    @inbounds @simd for j in 1:size(A, 2)
+        k = A.A.colptr[j]:(A.A.colptr[j+1] - 1)
+        if length(k) > 0
+            v = view(A.A.nzval, k)
+            mn = mean(v) * (length(k) / n)
+            #sd .= sqrt(sum(v.^2) / n - mn^2) # broadcasting allocates a lot
+            sd = sqrt(sum(vi^2 for vi in v) / n - mn^2)
+            A.A.nzval[k] .= v ./ sd
+            A.centers[j] ./= sd
+        end
+    end
+    return A
+end
+
+function scale_sd(A::SparseMatrixCSC; corrected=true)
+    return scale_sd!(copy(A), corrected=corrected)
+end
+
+function scale_sd!(A::SparseMatrixCSC; corrected=true)
+    return (corrected ? _sd_scale_corrected!(A) : _sd_scale_uncorrected!(A))
+end
+
+function _sd_scale_corrected!(A::SparseMatrixCSC)
+    n = size(A, 1)
+    @inbounds @simd for j in 1:size(A, 2)
+        k = A.colptr[j]:(A.colptr[j+1] - 1)
+        if length(k) > 0
+            v = view(A.nzval, k)
+            mn = mean(v) * (length(k) / n)
+            sd = sqrt(sum(vi^2 for vi in v) / (n - 1) - (n / (n - 1)) * mn^2)
+            A.nzval[k] .= v ./ sd
+        end
+    end
+    return A
+end
+
+function _sd_scale_uncorrected!(A::SparseMatrixCSC)
+    n = size(A, 1)
+    @inbounds @simd for j in 1:size(A, 2)
+        k = A.colptr[j]:(A.colptr[j+1] - 1)
+        if length(k) > 0
+            v = view(A.nzval, k)
+            mn = mean(v) * (length(k) / n)
+            #sd .= sqrt(sum(v.^2) / n - mn^2) # broadcasting allocates a lot
+            sd = sqrt(sum(vi^2 for vi in v) / n - mn^2)
+            A.nzval[k] .= v ./ sd
+        end
+    end
+    return A
+end
 
 
 #Tuple{Base.LinAlg.SVD{Float64,Float64,Array{Float64,2}},Int64,Int64,Int64,Array{Float64,1}}
