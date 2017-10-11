@@ -49,7 +49,8 @@ Ac * X = (A - O * M') * X
 
 i.e. we can just perform the usual sparse matrix multiplication of `A * X` and
 then do a vector-matrix multiply of `M' * X` and broadcast that to the rows of
-the result.
+the result. Thus, the only extra information besides the original sparse matrix
+that we need are the matrix column means.
 
 Using Int64 value types is not advised.
 
