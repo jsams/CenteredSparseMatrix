@@ -32,9 +32,24 @@ The key point is that the sparsity structure of the matrix is left unchanged,
 the centering of the zero-elements is done on-demand, and where possible, algorithms
 take advantage of knowing the column-constant mean value.
 
-For the matrix multiplications `X_cent_sparse  * Y` and `X_cent_sparse' * Z`, there
-is minimal overhead compared to the plain sparse multiplications `X * Y` and `X' * Z`,
-requiring only an extra dense vector-matrix multiply and subtraction.
+For the matrix multiplications `X_cent_sparse  * Y` and `X_cent_sparse' * Z`,
+there is minimal overhead compared to the plain sparse multiplications `X * Y`
+and `X' * Z`, requiring only an extra dense vector-matrix multiply and
+subtraction. How?
+
+Let `A` be an `n`x`m` sparse matrix and `Ac` be the the matrix that results
+from subtracting the column means of `A` from `A`. To be precise, let `M` be a
+the column vector of `A`'s column means, and `O` a column vector of `n` `1`'s.
+
+```
+Ac := A - O * M'
+Ac * X = (A - O * M') * X
+       = A * X - O * M' * X
+```
+
+i.e. we can just perform the usual sparse matrix multiplication of `A * X` and
+then do a vector-matrix multiply of `M' * X` and broadcast that to the rows of
+the result.
 
 Using Int64 value types is not advised.
 
