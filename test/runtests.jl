@@ -77,6 +77,12 @@ for T in (Int32, Float32, Float64, Complex64, Complex128)
     if !(T <: Complex)
         Acd2 = copy(Acd)
         @test isapprox(scale!(Acd2, 1 ./ vec(std(Acd2, 1))), scale_sd!(Acs2))
+        if !(T <: Integer)
+            Af = full(A)
+            As = copy(A)
+            # produces floats, so can't do in place, should do for scale_sd()
+            @test isapprox(scale!(Af, 1 ./ vec(std(Af, 1))), scale_sd!(As))
+        end
         # can't find an appropriate scale_sd...?!
         #@test isapprox(scale!(Acd2, 1 ./ vec(std(Acd2, 1))), scale_sd(Acs2))
     end
