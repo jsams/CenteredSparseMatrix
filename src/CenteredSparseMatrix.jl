@@ -171,7 +171,7 @@ end
     n == size(x, 1) || throw(DimensionMismatch("rows of x do not match rows of A"))
     y[:] = 0
     At_mul_B!(y, A.A, x)
-    y[:, :] -= A.centers .* sum(x, 1)
+    y[:, :] .-= A.centers .* sum(x, 1)
     return y
 end
 
@@ -187,7 +187,7 @@ end
     n == size(x, 1) || throw(DimensionMismatch("rows of x do not match rows of A"))
     y[:] = 0
     Ac_mul_B!(y, A.A, x)
-    y[:, :] -= conj.(A.centers) .* sum(x, 1)
+    y[:, :] .-= conj.(A.centers) .* sum(x, 1)
     return y
 end
 

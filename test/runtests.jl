@@ -2,7 +2,7 @@ include("../src/CenteredSparseMatrix.jl")
 #include("sparse_centered.jl")
 
 using Main.CenteredSparseMatrix
-using Base.Test
+using Test
 
 
 
@@ -76,15 +76,21 @@ for T in (Int32, Float32, Float64, Complex64, Complex128)
 
     if !(T <: Complex)
         Acd2 = copy(Acd)
-        @test isapprox(scale!(Acd2, 1 ./ vec(std(Acd2, 1))), scale_sd!(Acs2))
-        if !(T <: Integer)
-            Af = full(A)
-            As = copy(A)
-            # produces floats, so can't do in place, should do for scale_sd()
-            @test isapprox(scale!(Af, 1 ./ vec(std(Af, 1))), scale_sd!(As))
-        end
+        scale_sd!(Acs2)
+        scale!(Acd2, 1 ./ vec(std(Acd2, 1)))
         # can't find an appropriate scale_sd...?!
-        #@test isapprox(scale!(Acd2, 1 ./ vec(std(Acd2, 1))), scale_sd(Acs2))
+        #@test isapprox(Acd2, scale_sd(Acs2))
+        @test isapprox(Acd2, Acs2)
+        # produces floats, so can't do in place, should do for scale_sd()
+        if !(T <: Integer)
+            Ad = full(A)
+            As = copy(A)
+            scale!(Ad, 1 ./ vec(std(Ad, 1)))
+            # can't find an appropriate scale_sd...?!
+            #@test isapprox(Ad, scale_sd(As))
+            scale_sd!(As)
+            @test isapprox(Ad, As)
+        end
     end
 
     println(T, " complete")
